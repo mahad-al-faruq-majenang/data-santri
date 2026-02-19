@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Siswa MI & MT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <div class="max-w-5xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">Dashboard Data Siswa</h1>
+            <p class="text-gray-500 text-sm">Menampilkan data Nama dan NIS dari unit MI dan MT.</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-col md:flex-row gap-4 mb-6">
+            <div class="flex-1">
+                <input type="text" id="searchInput" placeholder="Cari nama atau NIS..." 
+                    class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+            </div>
+            <div class="flex bg-white rounded-lg shadow-sm p-1 border border-gray-200">
+                <button onclick="switchTab('MI')" id="tabMI" class="px-6 py-2 rounded-md text-sm font-medium transition-all tab-active">MI (Madrasah Ibtidaiyah)</button>
+                <button onclick="switchTab('MT')" id="tabMT" class="px-6 py-2 rounded-md text-sm font-medium transition-all text-gray-500 hover:text-gray-700">MT (Madrasah Tsanawiyah)</button>
+            </div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+            <div id="loadingState" class="hidden p-12 flex flex-col items-center justify-center">
+                <div class="loader mb-4"></div>
+                <p class="text-gray-500">Mengambil data dari spreadsheet...</p>
+            </div>
+
+            <div id="errorState" class="hidden p-8 text-center">
+                <div class="text-red-500 mb-2">⚠️ Gagal memuat data</div>
+                <p class="text-sm text-gray-500" id="errorMessage"></p>
+                <button onclick="initFetch()" class="mt-4 text-blue-600 hover:underline text-sm font-medium">Coba Lagi</button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="dataTable">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+                            <th class="px-6 py-4 font-semibold border-b">No</th>
+                            <th class="px-6 py-4 font-semibold border-b">Nama Lengkap</th>
+                            <th class="px-6 py-4 font-semibold border-b">NIS</th>
+                            <th class="px-6 py-4 font-semibold border-b text-right">Unit</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-gray-100 text-gray-700">
+                        <!-- Data rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="emptyState" class="hidden p-12 text-center">
+                <p class="text-gray-400">Tidak ada data yang ditemukan.</p>
+            </div>
+        </div>
+
+        <div class="mt-4 text-center">
+            <p class="text-[10px] text-gray-400 uppercase tracking-widest">Aplikasi Pengelola Data Otomatis</p>
+        </div>
+    </div>
+
+    <script>
+        // Masukkan ID Spreadsheet Anda di sini (Pastikan sudah "Publish to Web")
+        // Contoh: 'https://docs.google.com/spreadsheets/d/1XyZ.../pubhtml'
+        // Gunakan ID unik dari URL spreadsheet Anda.
+        const SPREADSHEET_ID = '1twMcT17KS4j7dyU23KbZlmyA3JZ53Y_SsZvs6_L1Jn8'; 
+        
+        // URL untuk CSV Export (Ganti SPREADSHEET_ID jika menggunakan spreadsheet asli)
+        // Format: https://docs.google.com/spreadsheets/d/[ID]/export?format=csv&gid=[GID]
+        
+        let allData = {
+            MI: [],
+            MT: []
+        };
+        let currentTab = 'MI';
+
+        const tableBody = document.getElementById('tableBody');
+        const searchInput = document.getElementById('searchInput');
+        const loadingState = document.getElementById('loadingState');
+        const errorState = document.getElementById('errorState');
+        const dataTable = document.getElementById('dataTable');
+        const emptyState = document.getElementById('emptyState');
+
+        // Fungsi Simulasi/Fetch
+        async function fetchData(gid) {
+            // Karena ini contoh, saya menggunakan data simulasi jika ID belum diisi
+            // Jika Anda ingin live data, gunakan fetch ke URL CSV Google Sheets
+            if (SPREADSHEET_ID === 'MASUKKAN_ID_SPREADSHEET_ANDA') {
+                return gid === '0' 
+                    ? [["NAMA", "NIS"], ["Ahmad Fauzi", "12345"], ["Siti Aminah", "12346"], ["Budi Santoso", "12347"]]
+                    : [["NAMA", "NIS"], ["Rizky Pratama", "54321"], ["Laila Sari", "54322"]];
+            }
+
+            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${gid}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Pastikan Spreadsheet sudah di-Publish ke Web');
+            const text = await response.text();
+            
+            // Simple CSV parser
+            return text.split('\n').map(row => row.split(',').map(cell => cell.replace(/"/g, '').trim()));
+        }
+
+        async function initFetch() {
+            showState('loading');
+            try {
+                const dataMI = await fetchData('0');
+                const dataMT = await fetchData('2124689934');
+                
+                // Proses data (asumsi baris 0 adalah header)
+                allData.MI = dataMI.slice(1).filter(r => r[0]).map(r => ({ nama: r[0], nis: r[1] }));
+                allData.MT = dataMT.slice(1).filter(r => r[0]).map(r => ({ nama: r[0], nis: r[1] }));
+                
+                renderTable();
+                showState('data');
+            } catch (err) {
+                document.getElementById('errorMessage').innerText = err.message;
+                showState('error');
+            }
+        }
+
+        function renderTable() {
+            const query = searchInput.value.toLowerCase();
+            const filtered = allData[currentTab].filter(item => 
+                item.nama.toLowerCase().includes(query) || 
+                item.nis.toString().includes(query)
+            );
+
+            tableBody.innerHTML = '';
+            
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+                dataTable.classList.add('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            dataTable.classList.remove('hidden');
+
+            filtered.forEach((item, index) => {
+                const row = `
+                    <tr class="hover:bg-blue-50 transition-colors">
+                        <td class="px-6 py-4 text-sm text-gray-400">${index + 1}</td>
+                        <td class="px-6 py-4 text-sm font-semibold text-gray-800">${item.nama}</td>
+                        <td class="px-6 py-4 text-sm text-gray-600 font-mono">${item.nis}</td>
+                        <td class="px-6 py-4 text-right">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${currentTab === 'MI' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}">
+                                ${currentTab}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('tabMI').className = `px-6 py-2 rounded-md text-sm font-medium transition-all ${tab === 'MI' ? 'tab-active bg-blue-50' : 'text-gray-500 hover:text-gray-700'}`;
+            document.getElementById('tabMT').className = `px-6 py-2 rounded-md text-sm font-medium transition-all ${tab === 'MT' ? 'tab-active bg-blue-50' : 'text-gray-500 hover:text-gray-700'}`;
+            renderTable();
+        }
+
+        function showState(state) {
+            loadingState.classList.add('hidden');
+            errorState.classList.add('hidden');
+            dataTable.classList.add('hidden');
+            emptyState.classList.add('hidden');
+
+            if (state === 'loading') loadingState.classList.remove('hidden');
+            else if (state === 'error') errorState.classList.remove('hidden');
+            else if (state === 'data') dataTable.classList.remove('hidden');
+        }
+
+        searchInput.addEventListener('input', renderTable);
+
+        // Jalankan saat load
+        window.onload = initFetch;
+    </script>
+</body>
+</html>
